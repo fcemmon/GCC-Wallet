@@ -13,8 +13,20 @@ const express        = require('express');
 const bodyParser     = require('body-parser');
 const app            = express();
 const basicAuth 	 = require('express-basic-auth');
+var mongoose 		 = require('mongoose');
 const http = require('http');
 const https = require('https');
+
+var mongoDB 		 = require('./config').mongoDB;
+mongoose.connect(mongoDB);
+var db = mongoose.connection;
+
+db.on('error', (err) => {
+	console.log(err);
+});
+db.once('open', () => {
+	console.log('Connected to DB');
+});
 
 // app.use(basicAuth({
 //     users: { 'admin': 'TMSgKVEEiDAaMpS1rY1Ip81zh29WoUfw' }

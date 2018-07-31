@@ -1,12 +1,19 @@
 var eth = require('../eth.js');
 var authService = require('../services/auth.service');
+var addressService = require('../services/address.service');
 
 module.exports = function(app, db) {
   app.post('/wallet/create', (req, res) => {
     if (authService.checkAuth(req)) {
       eth.newAccount().then(function(value) {
-        console.log("wallet created");
-        res.send({status:true, data:{address:value.address, privateKey:value.privateKey}});
+        var data = {};
+          data.address = value.address;
+          data.privateKey = value.privateKey;
+          addressService.create(data).then(result=>{
+            res.send({status:true, data:{id:result.id}});
+          }).catch(err => {
+            res.send({status:false, message:err.message});
+          });
       }, function(error) {
         res.send({status:false, message:error});
       });
@@ -16,46 +23,83 @@ module.exports = function(app, db) {
   });
   app.post('/wallet/balances', (req, res) => {
     if (authService.checkAuth(req)) {
-      let address = req.body.address;
+      let id = req.body.id;
       let contract = req.body.contract;
-      if (!contract) {
-        eth.getBalance(address).then(function(value) {
-          res.send({status:true, data:value});
-        }, function(error) {
-          res.send({status:false, message:error});
-        });
-      } else {
-        eth.getTokenBalance(address, contract).then(function(value) {
-          res.send({status:true, data:value});
-        }, function(error) {
-          res.send({status:false, message:error});
-        })
-      }
+      addressService.getAddressbyID(id).then(result=>{
+        if (!contract) {
+          eth.getBalance(result.address).then(function(value) {
+            res.send({status:true, data:value});
+          }, function(error) {
+            res.send({status:false, message:error});
+          });
+        } else {
+          eth.getTokenBalance(result.address, contract).then(function(value) {
+            res.send({status:true, data:value});
+          }, function(error) {
+            res.send({status:false, message:error});
+          })
+        }
+      }).catch(err => {
+        res.send({status:false, message:err});
+      });
     } else {
       authService.responseError(res);
     }
   });
+  app.post('/transaction/list', (req, res) => {
+    if (authService.checkAuth(req)) {
+      let id = req.body.id;
+      let contract = req.body.contract;
+      addressService.getAddressbyID(id).then(result => {
+        if (!contract) {
+          eth.listTransactionsByAddress(result.address).then(function(value) {
+            res.send({status:true, data:value});
+          }, function(error) {
+            res.send({status:false, message:error});
+          })
+        } else {
+          eth.listTokenTransactionsByAddress(result.address, contract).then(value => {
+            res.send({status:true, data:value});
+          }).catch(err => {
+            res.send({status:true, message:err});
+          });
+        }
+      }).catch(err => {
+        res.send({status:false, message:err.message});
+      });
+    } else {
+      authService.responseError(res);
+    }
+  })
   app.post('/transaction/create', (req, res) => {
     if (authService.checkAuth(req)) {
       let from = req.body.from;
       let to = req.body.to;
       let amount = req.body.amount;
       let contract = req.body.contract;
-      let privateKey = req.body.privateKey;
 
-      if (!contract) {
-        eth.transfer(privateKey, from, to, amount).then(value => {
-          res.send({status:true, data:value});
-        }).catch(error => {
-          res.send({status:false, message:error});
+      addressService.getAddressbyID(from).then(result1 => {
+        let fromAddress = result1.address;
+        let privateKey = result1.privateKey;
+        addressService.getAddressbyID(to).then(result2 => {
+          let toAddress = result2.address;
+          if (!contract) {
+            eth.transfer(privateKey, fromAddress, toAddress, amount).then(value => {
+              res.send({status:true, data:value});
+            }).catch(error => {
+              res.send({status:false, message:error});
+            })
+          } else {
+            eth.transferToken(privateKey, fromAddress, toAddress, amount, contract).then(value => {
+              res.send({status:true, data:value});
+            }).catch(error => {
+              res.send({status:false, message:error});
+            })
+          }
+        }).catch(err => {
+          res.send({status:false, message:err.message});
         })
-      } else {
-        eth.transferToken(privateKey, from, to, amount, contract).then(value => {
-          res.send({status:true, data:value});
-        }).catch(error => {
-          res.send({status:false, message:error});
-        })
-      }
+      })
     } else {
       authService.responseError(res);
     }

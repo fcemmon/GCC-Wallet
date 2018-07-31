@@ -29,7 +29,8 @@ var service = {};
 service.newAccount = newAccount;
 service.getBalance = getBalance;
 service.transfer = transfer;
-
+service.listTransactionsByAddress = listTransactionsByAddress;
+service.listTokenTransactionsByAddress = listTokenTransactionsByAddress;
 service.getTokenBalance = getTokenBalance;
 service.transferToken = transferToken;
 
@@ -137,6 +138,101 @@ function transfer(pk, fromAddress, toAddress, p_amount) {
 	return deferred.promise;
 }
 
+function listTransactionsByAddress(addr) {
+	let deferred = Q.defer();
+	let return_txs = [];
+
+	// if (pagenum === undefined) {
+	// 	pagenum = 1;
+	// }
+
+	// if (limit === undefined) {
+	// 	limit = 10;
+	// }
+
+	// let url = "https://api.etherscan.io/api?module=account&action=txlist&address=" + addr + "&startblock=0&endblock=99999999&page=" + pagenum + "&offset=" + limit + "&sort=desc&apikey=VG4EJ7WXR5P5SYPD5466QNRKEFV7T423WA"
+	let url = "http://api.etherscan.io/api?module=account&action=txlist&address=" + addr + "&startblock=0&endblock=99999999&page=1&offset=1000&sort=desc&apikey=VG4EJ7WXR5P5SYPD5466QNRKEFV7T423WA"
+	request({
+		uri: url,
+		method: "GET",
+	}, function(error, response, body) {
+		if (error) {
+			deferred.reject('Error while getting the ETH transaction details by address');
+		} else {
+			let r_txs = [];
+			if (body.length > 0) {
+				r_txs = JSON.parse(body);
+				if (Array.isArray(r_txs.result) && r_txs.result.length > 0) {
+					_.each(r_txs.result, (tx) => {
+						let amount = parseFloat(tx.value) / 1e18;
+						let fee = parseFloat(tx.gasUsed) * parseFloat(tx.gasPrice) / 1e18;
+						let sender_amount = amount + fee;
+						if (tx.to.toLowerCase() == addr.toLowerCase()) {
+							return_txs.push({
+								txid: tx.hash,
+								type: 'receive',
+								time: tx.timeStamp,
+								amount: amount,
+							});
+						}
+					});
+				}
+			}
+			deferred.resolve(return_txs);
+		}
+	});
+	return deferred.promise;
+}
+
+function listTokenTransactionsByAddress(address, contract_address) {
+	let deferred = Q.defer();
+	let return_txs = [];
+
+	let url = "http://api.etherscan.io/api?module=account&action=tokentx&address=" + address + "&startblock=0&endblock=99999999&page=1&offset=1000&sort=desc&apikey=VG4EJ7WXR5P5SYPD5466QNRKEFV7T423WA"
+	request({
+		uri: url,
+		method: "GET",
+	}, function(error, response, body) {
+		if (error) {
+			deferred.reject('Error while getting the ETH transaction details by address');
+		} else {
+			let r_txs = [];
+			if (body.length > 0) {
+				r_txs = JSON.parse(body);
+				if (Array.isArray(r_txs.result) && r_txs.result.length > 0) {
+					_.each(r_txs.result, (tx) => {						
+						let tx_input = tx.input;
+						let tx_method_id = tx_input.substring(0, 10);
+						let tx_receiver = tx_input.substring(10, 74);
+						let amount = parseInt(tx_input.substring(74), 16) / 1e18;
+
+						// let r_address = address.substring(2)
+
+						// if (tx.to.toLowerCase() == addr.toLowerCase()) {
+						if (tx_receiver.toLowerCase().indexOf(address.substring(2).toLowerCase()) > -1) {
+							return_txs.push({
+								txid: tx.hash,
+								type: 'receive',
+								time: tx.timeStamp,
+								amount: amount,
+							});
+						} else {
+							return_txs.push({
+								txid: tx.hash,
+								type: 'send',
+								time: tx.timeStamp,
+								amount: amount,
+							});
+						}
+					});
+				}
+			}
+			deferred.resolve(return_txs);
+		}
+	});
+	return deferred.promise;
+}
+
 function getTokenBalance(address, contractAddress) {
 
 	// web3.eth.txpool.status().then(status => {
@@ -165,7 +261,7 @@ function getTokenBalance(address, contractAddress) {
 			tokenDecimals = parseFloat(decimals);
 			return tokenContract.methods.balanceOf(address).call();
 		}).then(function(balance) {
-			deferred.resolve((balance / Math.pow(10, tokenDecimals)).toFixed(9));
+			deferred.resolve((balance / Math.pow(10, tokenDecimals)).toFixed(0));
 	    }).catch(function(err) {
 	    	deferred.reject(err.message);
 	    });
